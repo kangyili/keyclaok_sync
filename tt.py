@@ -1,19 +1,15 @@
-import pandas as pd
+import sys
 
-from keycloak_sync.model.bmcsvfile import BMcsvfile
-from keycloak_sync.model.kc import Keycloak
+import click
+from keycloak import KeycloakAdmin
 
-# b = BMcsvfile('/Users/kangyi/Dropbox/Polynom/keycloak_sync/test1.csv')
-# users = b.readcsv2users()
-# for u in users:
-#     print(f'{u.username} ->{u.attributes}')
-
-kc = Keycloak(server_url='https://keycloak.int-pripolis.polynom.io/auth/',
+kc_admin = KeycloakAdmin(server_url='https://keycloak.int-pripolis.polynom.io/auth/',
                          client_id='keycloak-api',
                          realm_name='test-kc-api',
-                         client_secret_key='d7633839-7e69-483e-a30c-d8b8c4632d62')
-# print(b.readcsv2users()[0].role)
+                         client_secret_key='d7633839-7e69-483e-a30c-d8b8c4632d62',
+                         verify=True)
 
-# kc.delete_users()
-# users = kc.get_users()
-# BMcsvfile.users2csv(users, './myccc.csv')
+l = list(map(lambda x: x['name'], kc_admin.get_realm_roles()))
+user = kc_admin.get_user(user_id='0041a29f-d541-4e1a-ac8b-cdbf781cc6c7')
+print(
+    dict(map(lambda item: (item[0], ''.join(item[1])), user['attributes'].items())))

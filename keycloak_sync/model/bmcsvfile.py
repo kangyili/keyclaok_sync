@@ -1,7 +1,6 @@
 """Define BM style CSV file"""
-from keycloak_sync.model.bmuser import BMuser
 from keycloak_sync.abstract.csvfile import CSVfile
-from keycloak_sync.model.log import logging
+import logging
 import pandas as pd
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class BMcsvfile(CSVfile):
             return False
 
     @classmethod
-    def readrow2user(cls, row: list) -> BMuser:
+    def readrow2user(cls, row: list):
         """read one row of the csv file and trun it in to bm user instance
 
         Args:

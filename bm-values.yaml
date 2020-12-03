@@ -1,0 +1,66 @@
+client: "bm"
+encoding: "latin1"
+format: "CSV"
+separator: ";"
+header: 0
+ignore_n_rows: 1
+data_model:
+  - name: "Date activation de compte"
+    type: "string"
+    regex: "^[0-9]{2}/[0-9]{2}/[0-9]{2}$"
+    nullable: false
+  - name: "Date désactivation de compte"
+    type: "string"
+    regex: "^.*$"
+    nullable: true
+  - name: "Code(s) agence(s)"
+    type: "string"
+    regex: "^[0-9A-Z]{6}(_[0-9A-Z]{6})*$"
+    nullable: false
+  - name: "Libellé(s) agence(s)"
+    type: "string"
+    regex: "^RP .*$"
+    nullable: false
+  - name: "Profil"
+    type: "string"
+    regex: "^VALIDATION_.*$"
+    nullable: false
+  - name: "Prénom"
+    type: "string"
+    regex: "^[a-zA-Z].*$"
+    nullable: false
+  - name: "Nom"
+    type: "string"
+    regex: "^[a-zA-Z].*$"
+    nullable: false
+  - name: "Mail"
+    type: "string"
+    regex: "^[a-z].*@testonly.com$"
+    nullable: false
+  - name: "Mot de passe"
+    type: "string"
+    regex: "^.*$"
+    nullable: true
+
+mapper:
+  createdtime: "Date activation de compte"
+  deactivetime: "Date désactivation de compte"
+  email: "Mail"
+  username: "Mail"
+  firstname: "Prénom"
+  lastname: "Nom"
+  role: "Profil"
+  password: "Mot de passe"
+  attributes:
+    - key: "Subsidiary Code"
+      value: "Code(s) agence(s)"
+    - key: "Subsidiary Name"
+      value: "Libellé(s) agence(s)"
+
+custom_attributes:
+  - key: "Client Short Name"
+    value: "bm"
+  - key: "Client Full Name"
+    value: "Bois & Materiaux"
+
+export_rules:

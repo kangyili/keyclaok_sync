@@ -1,9 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 import json
-from keycloak_sync.model.log import logging
-
-logger = logging.getLogger(__name__)
 
 
 class CSVfile(ABC):
@@ -36,7 +33,7 @@ class CSVfile(ABC):
                                    sep=self.separator, header=self.header, skip_blank_lines=True)
                 self.data = data
             except FileNotFoundError as error:
-                logger.error(f'Unable to find file: {error}')
+                #logger.error(f'Unable to find file: {error}')
                 raise error
             return func(self)
         return wrapper
