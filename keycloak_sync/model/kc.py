@@ -1,9 +1,12 @@
 import logging
+import cerberus
 import coloredlogs
 from datetime import datetime
+from typing import Union
 import pandas as pd
 from keycloak import KeycloakAdmin, exceptions
 from keycloak_sync.model.kcuser import KCUser
+from keycloak_sync.model.csvloader import CSVLoader
 logger = logging.getLogger(__name__)
 
 
@@ -104,7 +107,7 @@ class Keycloak:
         """
         list(map(self.add_user, users))
 
-    def delete_user(self, username: str) -> bool:
+    def delete_user(self, username: str):
         """Delete a user from keycloak
 
         Args:
@@ -113,65 +116,68 @@ class Keycloak:
         Returns:
             bool: Success is True, otherwise is False
         """
-        user_id = self.kc_admin.get_user_id(username=username)
         try:
-            assert user_id
+            user_id = self.kc_admin.get_user_id(username=username)
             self.kc_admin.delete_user(user_id=user_id)
             logger.info(f'Delete user: {username}')
-            return True
-        except AssertionError:
-            logger.warning(f'User: {username} does not exist')
-            return False
+        except exceptions.KeycloakGetError:
+            raise KeycloakError(f'User: {username} does not exist')
 
-    def delete_users(self):
+    @connect
+    def delete_all_users(self):
         """Delete all users from keycloak
         """
-        for user in self.kc_admin.get_users():
-            try:
-                assert self.delete_user(username=user['username'])
-            except AssertionError:
-                logger.warning(f'Skip User: {user["username"]}')
+        list(map(lambda x: self.delete_user(
+            username=x['username']), self.kc_admin.get_users()))
 
-    def get_user_realm_role(self, user_id: str):
-        for role in list(map(lambda x: x['name'], self.kc_admin.get_realm_roles())):
+    def get_user_realm_role(self, csvloader: CSVLoader, user_id: str) -> Union[str, None]:
+        for role in csvloader.values["export_rules"]["available_roles"]:
             try:
                 for user in self.kc_admin.get_realm_role_members(role):
                     if user['id'] == user_id:
                         return role
             except exceptions.KeycloakGetError as error:
-                logger.error(f'Role: {role} does not exist in realm: {error}')
+                raise KeycloakError(f'Role: {role} does not exist in realm')
         return None
 
-    def get_user(self, user_id: str) -> KCUser:
+    @staticmethod
+    def fliter_user(csvloader: CSVLoader, user: dict) -> bool:
+        try:
+            validator = cerberus.Validator(csvloader.load_export_identifier())
+            name = csvloader.values["export_rules"]['identifier']['name']
+            return validator.validate({name: user[name]})
+        except cerberus.schema.SchemaError as error:
+            raise KeycloakError(f'Unknown rule: {error}')
+
+    def get_user(self, csvloader: CSVLoader, user_id: str) -> Union[KCUser, None]:
         try:
             user = self.kc_admin.get_user(user_id=user_id)
-            createdtime = datetime.fromtimestamp(
-                int(str(user['createdTimestamp'])[:10])).strftime('%d/%m/%y')
-            # print(createdtime)
-            role = self.get_user_realm_role(user_id=user_id)
-            # print(user['username']+'--->'+role)
-            attributes = dict(
-                map(lambda item: (item[0], ''.join(item[1])), user['attributes'].items()))
-            # print(attributes)
-            kcuser = KCUser(email=user['email'], username=user['username'],
-                            firstname=user['firstName'], lastname=user['lastName'],
-                            role=role, attributes=attributes)
-            kcuser.createdtime = createdtime
         except exceptions.KeycloakGetError as error:
             logger.error(f'Unable to find user id: f{user_id}: {error}')
             raise error
-        return kcuser
+        if Keycloak.fliter_user(csvloader=csvloader, user=user):
+            role = self.get_user_realm_role(
+                csvloader=csvloader, user_id=user_id)
+            attributes = dict(
+                map(lambda item: (item[0], ''.join(item[1])), user['attributes'].items()))
+            kcuser = KCUser(email=user['email'], username=user['username'],
+                            firstname=user['firstName'], lastname=user['lastName'],
+                            role=role, attributes=attributes)
+            kcuser.createdtime = datetime.fromtimestamp(
+                int(str(user['createdTimestamp'])[:10])).strftime('%d/%m/%y')
+            return kcuser
+        else:
+            return None
 
     @connect
-    def get_users(self) -> list:
+    def get_users(self, csvloader: CSVLoader) -> list:
+        logger.info(f"Use export schema: {csvloader.load_export_identifier()}")
         list_users = []
         for user in self.kc_admin.get_users():
             try:
-                print(user['id'])
-                x = self.get_user(user['id'])
-                print(x.username+'--->'+x.role)
-                list_users.append(x)
+                user = self.get_user(csvloader, user['id'])
+                logger.info(f'Get user {user.username}')
+                list_users.append(user)
             except exceptions.KeycloakGetError:
-                logger.error(f'Skip user id: f{user["id"]}')
-        print(len(list_users))
+                raise KeycloakError(f'Skip user id: f{user["id"]}')
         return list_users

@@ -64,3 +64,37 @@ custom_attributes:
     value: "Bois & Materiaux"
 
 export_rules:
+  format: "CSV"
+  separator: ";"
+  header: true
+  identifier:
+    name: "username"
+    type: "string"
+    regex: "^[a-z].*@testonly.com$"
+
+  mapper:
+    createdtime: "Date activation de compte"
+    deactivetime: "Date désactivation de compte"
+    email: "Mail"
+    username: "Mail"
+    firstname: "Prénom"
+    lastname: "Nom"
+    role: "Profil"
+    password: "Mot de passe"
+    attributes:
+      - key: "Subsidiary Code"
+        value: "Code(s) agence(s)"
+      - key: "Subsidiary Name"
+        value: "Libellé(s) agence(s)"
+
+  available_roles:
+    - VALIDATION_ADMIN
+    - VALIDATION_DA
+    - VALIDATION_RMP
+    - VALIDATION_VIEWER
+
+delete_rules:
+  identifier:
+    name: "username"
+    type: "string"
+    regex: "^[a-z].*@testonly.com$"

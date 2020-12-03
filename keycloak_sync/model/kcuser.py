@@ -1,8 +1,10 @@
 from typing import Iterator
-
+import logging
 from keycloak_sync.abstract.user import User
 from keycloak_sync.model.csvloader import CSVLoader
 from pandas import Series
+import coloredlogs
+logger = logging.getLogger(__name__)
 
 
 class CSVLoaderError(Exception):
@@ -28,6 +30,10 @@ class KCUserError(Exception):
 
 
 class KCUser(User):
+    @staticmethod
+    def set_log_level(level: str):
+        coloredlogs.install(level=level, logger=logger)
+
     @staticmethod
     def _create_list_empty_users(csvloader: CSVLoader):
         username_label = csvloader.values["mapper"]["username"]
@@ -63,6 +69,7 @@ class KCUser(User):
         iter_users = iter(list_users)
         series.map(lambda x: KCUser._set_user_parameter(
             parameter, iter_users, key, x))
+        logger.info(f'Assign {parameter}  to users')
 
     @ staticmethod
     def _add_custom_attributes(csvloader: CSVLoader, list_users: list):
@@ -76,7 +83,9 @@ class KCUser(User):
                     raise KCUserError(
                         f'custom_attributes only have attribute key and value.')
         list(map(assign_one_attribute, list_users))
+        logger.info(f'Assign {list_attributes}  to users')
 
+    @ staticmethod
     def create_list_users(csvloader: CSVLoader) -> list:
         list_users = KCUser._create_list_empty_users(csvloader)
         KCUser._assign_parameters(
