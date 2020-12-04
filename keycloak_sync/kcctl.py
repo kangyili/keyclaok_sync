@@ -3,7 +3,7 @@ import sys
 
 import click
 import coloredlogs
-
+from colorama import Fore, Style
 from keycloak_sync.model.csvloader import CSVLoader, CSVLoaderError
 from keycloak_sync.model.kc import Keycloak, KeycloakError
 from keycloak_sync.model.kcuser import KCUser, KCUserError
@@ -82,7 +82,7 @@ def export(**kwargs):
                       client_id=kwargs.get(Arguments.KEYCLOAK_CLIENT_ID),
                       realm_name=kwargs.get(Arguments.KEYCLOAK_REALM_NAME),
                       client_secret_key=kwargs.get(Arguments.KEYCLOAK_CLIENT_SECRET))
-        list_users = kc.get_users(csvloader=csvloader)
+        list_users = kc.get_users(csvloader=csvloader, rule='export_rules')
         logger.info(f"Finishing get all list of Users Object")
         csvloader.export_users_to_csv(
             list_users=list_users, export_path=kwargs.get(Arguments.OUTPUT_FILE_PATH))
@@ -119,4 +119,29 @@ def dropall(**kwargs):
             sys.exit(1)
     else:
         click.echo('Aborted!')
+        sys.exit(1)
+
+
+@kcctl.command()
+@click.option('--kc-url', Arguments.KEYCLOAK_SERVER_URL, envvar=Arguments.KEYCLOAK_SERVER_URL.upper(), required=True, help='Keycloak server url')
+@click.option('--kc-realm', Arguments.KEYCLOAK_REALM_NAME, envvar=Arguments.KEYCLOAK_REALM_NAME.upper(), required=True, help='Keycloak realm name')
+@click.option('--kc-clt', Arguments.KEYCLOAK_CLIENT_ID, envvar=Arguments.KEYCLOAK_CLIENT_ID.upper(), required=True, help='keycloak client name')
+@click.option('--kc-clt-sct', Arguments.KEYCLOAK_CLIENT_SECRET, envvar=Arguments.KEYCLOAK_CLIENT_SECRET.upper(), required=True, help='Keycloak cleint secret')
+@click.option('-v', '--values', Arguments.CSV_FILE_VALUES, envvar=Arguments.CSV_FILE_VALUES.upper(), required=True, help='Custom values file')
+def delete(**kwargs):
+    """Delete users by giving fliter conditions"""
+    try:
+        csvloader = CSVLoader(values=kwargs.get(Arguments.CSV_FILE_VALUES))
+        kc = Keycloak(server_url=kwargs.get(Arguments.KEYCLOAK_SERVER_URL),
+                      client_id=kwargs.get(Arguments.KEYCLOAK_CLIENT_ID),
+                      realm_name=kwargs.get(Arguments.KEYCLOAK_REALM_NAME),
+                      client_secret_key=kwargs.get(Arguments.KEYCLOAK_CLIENT_SECRET))
+        list_users = kc.get_users(csvloader=csvloader, rule='delete_rules')
+        list(map(lambda x: click.echo(
+            f'-->{Fore.RED}{x.username}{Style.RESET_ALL}'), list_users))
+        if click.confirm('Are you sure you want to delete these users on keycloak?'):
+            kc.delete_users(list_users=list_users)
+            click.echo(f'Total delete users: {len(list_users)}')
+    except (CSVLoaderError, KCUserError, KeycloakError) as error:
+        logger.error(error)
         sys.exit(1)

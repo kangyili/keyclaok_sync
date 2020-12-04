@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class KeycloakError(Exception):
-    """Exception raised for errors in the CSVLoader.
+    """Exception raised for errors in the Keycloak.
 
     Attributes:
         message -- explanation of the error
@@ -22,6 +22,8 @@ class KeycloakError(Exception):
 
 
 def connect(func):
+    """a wrapper for connecting"""
+
     def wrapper(self, *args, **kwargs):
         try:
             self.kc_admin = KeycloakAdmin(server_url=self.server_url,
@@ -45,9 +47,22 @@ class Keycloak:
 
     @staticmethod
     def set_log_level(level: str):
+        """set keycloak log level
+
+        Args:
+            level (str): log level
+        """
         coloredlogs.install(level=level, logger=logger)
 
     def _assign_role_to_user(self, user: KCUser):
+        """assgin user's role with its parameter
+
+        Args:
+            user (KCUser): user to assign
+
+        Raises:
+            KeycloakError: unable to assign role
+        """
         try:
             user_id = self.kc_admin.get_user_id(username=user.username)
             role_id = self.kc_admin.get_realm_role(user.role)['id']
@@ -66,7 +81,7 @@ class Keycloak:
                 f'Unable to assign user {user.username} with role {user.role}')
 
     @connect
-    def add_user(self, user):
+    def add_user(self, user: KCUser):
         """Add user to keycloak
 
         Args:
@@ -141,21 +156,47 @@ class Keycloak:
         return None
 
     @staticmethod
-    def fliter_user(csvloader: CSVLoader, user: dict) -> bool:
+    def fliter_user(csvloader: CSVLoader, user: dict, rule: str) -> bool:
+        """fliter users
+
+        Args:
+            csvloader (CSVLoader): a Csvloder instance to provide values file
+            user (dict): user's parameter name and vlaue
+            rule (str): schema used by cerberus
+
+        Raises:
+            KeycloakError: unknwon rule
+
+        Returns:
+            bool: return true when user is satisfied by rule
+        """
         try:
-            validator = cerberus.Validator(csvloader.load_export_identifier())
-            name = csvloader.values["export_rules"]['identifier']['name']
+            validator = cerberus.Validator(
+                csvloader.load_identifier(rule))
+            name = csvloader.values[rule]['identifier']['name']
             return validator.validate({name: user[name]})
         except cerberus.schema.SchemaError as error:
             raise KeycloakError(f'Unknown rule: {error}')
 
-    def get_user(self, csvloader: CSVLoader, user_id: str) -> Union[KCUser, None]:
+    def get_user(self, csvloader: CSVLoader, user_id: str, rule: str) -> Union[KCUser, None]:
+        """get user after flitering
+
+        Args:
+            csvloader (CSVLoader): a Csvloder instance to provide values file
+            user_id (str): user id on keycloak
+            rule (str): schema used by cerberus
+
+        Raises:
+            KeycloakError: invalide user id
+
+        Returns:
+            Union[KCUser, None]: if user exist then return user otherwise return none
+        """
         try:
             user = self.kc_admin.get_user(user_id=user_id)
         except exceptions.KeycloakGetError as error:
-            logger.error(f'Unable to find user id: f{user_id}: {error}')
-            raise error
-        if Keycloak.fliter_user(csvloader=csvloader, user=user):
+            raise KeycloakError(f'Unable to find user id: f{user_id}: {error}')
+        if Keycloak.fliter_user(csvloader=csvloader, user=user, rule=rule):
             role = self.get_user_realm_role(
                 csvloader=csvloader, user_id=user_id)
             attributes = dict(
@@ -170,14 +211,33 @@ class Keycloak:
             return None
 
     @connect
-    def get_users(self, csvloader: CSVLoader) -> list:
-        logger.info(f"Use export schema: {csvloader.load_export_identifier()}")
+    def get_users(self, csvloader: CSVLoader, rule: str) -> list:
+        """get list of users after flitering bt rules
+
+        Args:
+            csvloader (CSVLoader): a Csvloder instance to provide values file
+            rule (str): schema used by cerberus
+
+        Returns:
+            list: list of users
+        """
+        logger.info(
+            f"Use schema: {csvloader.load_identifier(rule)}")
         list_users = []
         for user in self.kc_admin.get_users():
-            try:
-                user = self.get_user(csvloader, user['id'])
-                logger.info(f'Get user {user.username}')
-                list_users.append(user)
-            except exceptions.KeycloakGetError:
-                raise KeycloakError(f'Skip user id: f{user["id"]}')
+            user_ = self.get_user(csvloader=csvloader,
+                                  user_id=user['id'], rule=rule)
+            if user_:
+                logger.info(f'Get user {user_.username}')
+                list_users.append(user_)
         return list_users
+
+    @connect
+    def delete_users(self, list_users: list):
+        """delete users by giving list of users
+
+        Args:
+            list_users (list): list of users to be deleted
+        """
+        list(map(lambda x: self.delete_user(
+            username=x.username), list_users))

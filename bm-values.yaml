@@ -97,4 +97,4 @@ delete_rules:
   identifier:
     name: "username"
     type: "string"
-    regex: "^[a-z].*@testonly.com$"
+    regex: "^arnaud.nobilet@testonly.com$"

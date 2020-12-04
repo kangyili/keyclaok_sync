@@ -189,7 +189,7 @@ dmypy.json
 
 *.csv
 entrypoint.py
-notebook.md
+notebook*
 testyaml.py
 tt.py
 .idea
