@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "keycloak_sync"
-version = "0.1.0"
-description = ""
+version = "0.1.5"
+description = "keycloak cli tool"
 authors = ["Kangyi LI <kangyi.li@polynom.com>"]
 
 [tool.poetry.dependencies]
