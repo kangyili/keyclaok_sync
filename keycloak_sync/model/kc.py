@@ -1,12 +1,14 @@
 import logging
-import cerberus
-import coloredlogs
 from datetime import datetime
 from typing import Union
+
+import cerberus
+import coloredlogs
 import pandas as pd
 from keycloak import KeycloakAdmin, exceptions
-from keycloak_sync.model.kcuser import KCUser
 from keycloak_sync.model.csvloader import CSVLoader
+from keycloak_sync.model.kcuser import KCUser
+
 logger = logging.getLogger(__name__)
 
 

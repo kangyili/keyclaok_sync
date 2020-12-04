@@ -1,9 +1,11 @@
-from typing import Iterator
 import logging
+from typing import Iterator
+
+import coloredlogs
 from keycloak_sync.abstract.user import User
 from keycloak_sync.model.csvloader import CSVLoader
 from pandas import Series
-import coloredlogs
+
 logger = logging.getLogger(__name__)
 
 

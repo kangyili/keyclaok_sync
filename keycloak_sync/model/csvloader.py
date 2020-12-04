@@ -1,10 +1,12 @@
-from logging import log
-import cerberus
 import logging
+from logging import log
+
+import cerberus
+import coloredlogs
 import pandas as pd
 import yaml
-import coloredlogs
 from keycloak_sync.abstract.loader import Loader
+
 logger = logging.getLogger(__name__)
 
 

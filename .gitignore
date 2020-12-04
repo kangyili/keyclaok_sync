@@ -193,3 +193,5 @@ notebook*
 testyaml.py
 tt.py
 .idea
+.VSCodeCounter/
+launch.json
