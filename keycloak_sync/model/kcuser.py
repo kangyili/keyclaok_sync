@@ -63,7 +63,7 @@ class KCUser(User):
 
     @ staticmethod
     def _assign_parameter_to_user(parameter: str, series: Series, list_users: list, key=None):
-        """call _set_user_parameter to assign parameter for a list of users
+        """call _set_parameter to assign parameter for a list of users
 
         Args:
             parameter (str): parameter's name

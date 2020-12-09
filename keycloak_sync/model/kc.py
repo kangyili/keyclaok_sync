@@ -148,6 +148,18 @@ class Keycloak:
             raise Keycloak.KeycloakError(f'User: {username} does not exist')
 
     def _get_user_realm_role(self, csvloader: CSVLoader, user_id: str) -> Union[str, None]:
+        """get user's realm role
+
+        Args:
+            csvloader (CSVLoader): csvloder object
+            user_id (str): user id
+
+        Raises:
+            Keycloak.KeycloakError: Exception raised for errors in the Keycloak
+
+        Returns:
+            Union[str, None]: role name or none if no found
+        """
         for role in csvloader.template[Template.EXPORT][Template.EXPORT_ROLES]:
             try:
                 for user in self.kc_admin.get_realm_role_members(role):
