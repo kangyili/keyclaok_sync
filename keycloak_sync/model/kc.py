@@ -6,21 +6,10 @@ import cerberus
 import coloredlogs
 import pandas as pd
 from keycloak import KeycloakAdmin, exceptions
-from keycloak_sync.model.csvloader import CSVLoader
+from keycloak_sync.model.csvloader import CSVLoader, Template
 from keycloak_sync.model.kcuser import KCUser
 
 logger = logging.getLogger(__name__)
-
-
-class KeycloakError(Exception):
-    """Exception raised for errors in the Keycloak.
-
-    Attributes:
-        message -- explanation of the error
-    """
-
-    def __init__(self, message):
-        self.message = message
 
 
 def connect(func):
@@ -34,12 +23,38 @@ def connect(func):
                                           client_secret_key=self.client_secret_key,
                                           verify=True)
         except (exceptions.KeycloakConnectionError, exceptions.KeycloakGetError):
-            raise KeycloakError(f'Unable to connect server')
+            raise Keycloak.KeycloakError(f'Unable to connect server')
         return func(self, *args, **kwargs)
     return wrapper
 
 
 class Keycloak:
+    class Keycloak_API:
+        ID = 'id'
+        FIRSTNAME = 'firstName'
+        LASTNAME = 'lastName'
+        CREATEDTIME = 'createdTimestamp'
+        EMAIL = 'email'
+        USERNAME = 'username'
+        ATTRIBUTES = 'attributes'
+        ROLE_NAME = 'name'
+        USER_ENABLE = 'enabled'
+        EMAIL_VERIFICATION = 'emailVerified'
+        CREDENTIALS = 'credentials'
+        CREDENTIALS_VALUE = 'value'
+        CREDENTIALS_TYPE = 'type'
+        CREDENTIALS_TYPE_VALUE = 'password'
+
+    class KeycloakError(Exception):
+        """Exception raised for errors in the Keycloak.
+
+        Attributes:
+            message -- explanation of the error
+        """
+
+        def __init__(self, message):
+            self.message = message
+
     def __init__(self, server_url: str, client_id: str, realm_name: str, client_secret_key: str):
         self.kc_admin = None
         self.server_url = server_url
@@ -66,24 +81,24 @@ class Keycloak:
             KeycloakError: unable to assign role
         """
         try:
-            user_id = self.kc_admin.get_user_id(username=user.username)
-            role_id = self.kc_admin.get_realm_role(user.role)['id']
+            user_id = self.kc_admin.get_user_id(username=user.username.lower())
+            role_id = self.kc_admin.get_realm_role(
+                user.role)[Keycloak.Keycloak_API.ID]
         except exceptions.KeycloakGetError:
-            raise KeycloakError(f'Unable to find role: {user.role}')
+            raise Keycloak.KeycloakError(f'Unable to find role: {user.role}')
         roles_info = [{
-            'id': role_id,
-            'name': user.role
+            Keycloak.Keycloak_API.ID: role_id,
+            Keycloak.Keycloak_API.ROLE_NAME: user.role
         }]
         try:
             self.kc_admin.assign_realm_roles(user_id=user_id,
                                              client_id=self.kc_admin.client_id,
                                              roles=roles_info)
         except exceptions.KeycloakGetError:
-            raise KeycloakError(
+            raise Keycloak.KeycloakError(
                 f'Unable to assign user {user.username} with role {user.role}')
 
-    @connect
-    def add_user(self, user: KCUser):
+    def _add_user(self, user: KCUser):
         """Add user to keycloak
 
         Args:
@@ -92,39 +107,31 @@ class Keycloak:
         Raises:
             error: exceptions.KeycloakGetError
         """
-        user_id = self.kc_admin.get_user_id(username=user.username)
+        user_id = self.kc_admin.get_user_id(username=user.username.lower())
         if user_id:
             self.kc_admin.delete_user(user_id=user_id)
             logger.warning(f'update existed user: {user.username}')
-        payload = {"email": user.email,
-                   "username": user.username,
-                   "enabled": True,
-                   "emailVerified": True,
-                   "firstName": user.firstname,
-                   "lastName": user.lastname,
-                   "attributes": user.attributes
+        payload = {Keycloak.Keycloak_API.EMAIL: user.email,
+                   Keycloak.Keycloak_API.USERNAME: user.username,
+                   Keycloak.Keycloak_API.USER_ENABLE: True,
+                   Keycloak.Keycloak_API.EMAIL_VERIFICATION: True,
+                   Keycloak.Keycloak_API.FIRSTNAME: user.firstname,
+                   Keycloak.Keycloak_API.LASTNAME: user.lastname,
+                   Keycloak.Keycloak_API.ATTRIBUTES: user.attributes
                    }
         if not pd.isnull(user.password):
-            payload['credentials'] = [
-                {"value": user.password, "type": "password", }]
+            payload[Keycloak.Keycloak_API.CREDENTIALS] = [
+                {Keycloak.Keycloak_API.CREDENTIALS_VALUE: user.password, Keycloak.Keycloak_API.CREDENTIALS_TYPE: Keycloak.Keycloak_API.CREDENTIALS_TYPE_VALUE}]
 
         try:
             self.kc_admin.create_user(payload)
             logger.info(f'Add user: {user.username} successfully')
         except exceptions.KeycloakGetError as error:
-            raise KeycloakError(
+            raise Keycloak.KeycloakError(
                 f'Unable to create user {user.username}: {error}')
         self._assign_role_to_user(user)
 
-    def add_users(self, users: list):
-        """Add list of users to keycloak
-
-        Args:
-            users (list): A list of BM user instances
-        """
-        list(map(self.add_user, users))
-
-    def delete_user(self, username: str):
+    def _delete_user(self, username: str):
         """Delete a user from keycloak
 
         Args:
@@ -138,27 +145,21 @@ class Keycloak:
             self.kc_admin.delete_user(user_id=user_id)
             logger.info(f'Delete user: {username}')
         except exceptions.KeycloakGetError:
-            raise KeycloakError(f'User: {username} does not exist')
+            raise Keycloak.KeycloakError(f'User: {username} does not exist')
 
-    @connect
-    def delete_all_users(self):
-        """Delete all users from keycloak
-        """
-        list(map(lambda x: self.delete_user(
-            username=x['username']), self.kc_admin.get_users()))
-
-    def get_user_realm_role(self, csvloader: CSVLoader, user_id: str) -> Union[str, None]:
-        for role in csvloader.values["export_rules"]["available_roles"]:
+    def _get_user_realm_role(self, csvloader: CSVLoader, user_id: str) -> Union[str, None]:
+        for role in csvloader.template[Template.EXPORT][Template.EXPORT_ROLES]:
             try:
                 for user in self.kc_admin.get_realm_role_members(role):
-                    if user['id'] == user_id:
+                    if user[Keycloak.Keycloak_API.ID] == user_id:
                         return role
             except exceptions.KeycloakGetError as error:
-                raise KeycloakError(f'Role: {role} does not exist in realm')
+                raise Keycloak.KeycloakError(
+                    f'Role: {role} does not exist in realm')
         return None
 
     @staticmethod
-    def fliter_user(csvloader: CSVLoader, user: dict, rule: str) -> bool:
+    def _filter_user(csvloader: CSVLoader, user: dict, rule: str) -> bool:
         """fliter users
 
         Args:
@@ -175,12 +176,12 @@ class Keycloak:
         try:
             validator = cerberus.Validator(
                 csvloader.load_identifier(rule))
-            name = csvloader.values[rule]['identifier']['name']
+            name = csvloader.template[rule][Template.RULE_IDENTIFIER][Template.RULE_IDENTIFIER_NAME]
             return validator.validate({name: user[name]})
         except cerberus.schema.SchemaError as error:
-            raise KeycloakError(f'Unknown rule: {error}')
+            raise Keycloak.KeycloakError(f'Unknown rule: {error}')
 
-    def get_user(self, csvloader: CSVLoader, user_id: str, rule: str) -> Union[KCUser, None]:
+    def _get_user(self, csvloader: CSVLoader, user_id: str, rule: str) -> Union[KCUser, None]:
         """get user after flitering
 
         Args:
@@ -197,17 +198,18 @@ class Keycloak:
         try:
             user = self.kc_admin.get_user(user_id=user_id)
         except exceptions.KeycloakGetError as error:
-            raise KeycloakError(f'Unable to find user id: f{user_id}: {error}')
-        if Keycloak.fliter_user(csvloader=csvloader, user=user, rule=rule):
-            role = self.get_user_realm_role(
+            raise Keycloak.KeycloakError(
+                f'Unable to find user id: f{user_id}: {error}')
+        if Keycloak._filter_user(csvloader=csvloader, user=user, rule=rule):
+            role = self._get_user_realm_role(
                 csvloader=csvloader, user_id=user_id)
             attributes = dict(
-                map(lambda item: (item[0], ''.join(item[1])), user['attributes'].items()))
-            kcuser = KCUser(email=user['email'], username=user['username'],
-                            firstname=user['firstName'], lastname=user['lastName'],
+                map(lambda attri: (attri[0], ''.join(attri[1])), user[Keycloak.Keycloak_API.ATTRIBUTES].items()))
+            kcuser = KCUser(email=user[Keycloak.Keycloak_API.EMAIL], username=user[Keycloak.Keycloak_API.USERNAME],
+                            firstname=user[Keycloak.Keycloak_API.FIRSTNAME], lastname=user[Keycloak.Keycloak_API.LASTNAME],
                             role=role, attributes=attributes)
             kcuser.createdtime = datetime.fromtimestamp(
-                int(str(user['createdTimestamp'])[:10])).strftime('%d/%m/%y')
+                int(str(user[Keycloak.Keycloak_API.CREATEDTIME])[:10])).strftime('%d/%m/%y')
             return kcuser
         else:
             return None
@@ -227,11 +229,11 @@ class Keycloak:
             f"Use schema: {csvloader.load_identifier(rule)}")
         list_users = []
         for user in self.kc_admin.get_users():
-            user_ = self.get_user(csvloader=csvloader,
-                                  user_id=user['id'], rule=rule)
-            if user_:
-                logger.info(f'Get user {user_.username}')
-                list_users.append(user_)
+            user_flitered = self._get_user(csvloader=csvloader,
+                                           user_id=user[Keycloak.Keycloak_API.ID], rule=rule)
+            if user_flitered:
+                logger.info(f'Get user {user_flitered.username}')
+                list_users.append(user_flitered)
         return list_users
 
     @connect
@@ -241,5 +243,23 @@ class Keycloak:
         Args:
             list_users (list): list of users to be deleted
         """
-        list(map(lambda x: self.delete_user(
-            username=x.username), list_users))
+
+        for user in list_users:
+            self._delete_user(username=user.username)
+
+    @connect
+    def delete_all_users(self):
+        """Delete all users from keycloak
+        """
+        for user in self.kc_admin.get_users():
+            self._delete_user(username=user[Keycloak.Keycloak_API.USERNAME])
+
+    @connect
+    def add_users(self, users: list):
+        """Add list of users to keycloak
+
+        Args:
+            users (list): A list of BM user instances
+        """
+        for user in users:
+            self._add_user(user=user)

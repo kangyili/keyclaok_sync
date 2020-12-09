@@ -19,7 +19,7 @@ data_model:
     nullable: false
   - name: "Libellé(s) agence(s)"
     type: "string"
-    regex: "^RP .*$"
+    regex: "^.*$"
     nullable: false
   - name: "Profil"
     type: "string"
@@ -35,7 +35,7 @@ data_model:
     nullable: false
   - name: "Mail"
     type: "string"
-    regex: "^[a-z].*@testonly.com$"
+    regex: "^[a-zA-Z].*@.*$"
     nullable: false
   - name: "Mot de passe"
     type: "string"
@@ -97,4 +97,4 @@ delete_rules:
   identifier:
     name: "username"
     type: "string"
-    regex: "^arnaud.nobilet@testonly.com$"
+    regex: "^.*@testonly.com$"

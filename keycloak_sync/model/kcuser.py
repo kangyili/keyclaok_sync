@@ -2,25 +2,25 @@ import logging
 from typing import Iterator
 
 import coloredlogs
-from keycloak_sync.abstract.user import User
-from keycloak_sync.model.csvloader import CSVLoader
+from keycloak_sync.abstract_model.user import User
+from keycloak_sync.model.csvloader import CSVLoader, Template
 from pandas import Series
 
 logger = logging.getLogger(__name__)
 
 
-class KCUserError(Exception):
-    """Exception raised for errors in the KCUser.
-
-    Attributes:
-        message -- explanation of the error
-    """
-
-    def __init__(self, message):
-        self.message = message
-
-
 class KCUser(User):
+
+    class KCUserError(Exception):
+        """Exception raised for errors in the KCUser.
+
+        Attributes:
+            message -- explanation of the error
+        """
+
+        def __init__(self, message):
+            self.message = message
+
     @staticmethod
     def set_log_level(level: str):
         """set KCUser log level
@@ -40,35 +40,11 @@ class KCUser(User):
         Returns:
             list: list of empty users
         """
-        username_label = csvloader.values["mapper"]["username"]
-        return [KCUser() for _ in range(csvloader.data[username_label].size)]
-
-    @staticmethod
-    def _assign_parameters(csvloader: CSVLoader, list_users: list):
-        """assign parameters for each user
-
-        Args:
-            csvloader (CSVLoader): a Csvloader instance providing files
-            list_users (list): list of empty users
-
-        Raises:
-            KCUserError: Exception raised for errors in the KCUser
-        """
-        list_parameters = list(csvloader.values["mapper"].keys())
-        for parameter in list_parameters:
-            if not hasattr(KCUser, parameter):
-                raise KCUserError(
-                    f'mapper is not allowed to contain parameter: {parameter}')
-            col = csvloader.values["mapper"][parameter]
-            if parameter == 'attributes' and isinstance(col, list):
-                list(map(lambda x: KCUser._assign_parameter_each_user(
-                    parameter, csvloader.data[x.get('value')], list_users, key=x.get('key')), col))
-            else:
-                KCUser._assign_parameter_each_user(
-                    parameter, csvloader.data[col], list_users)
+        username = csvloader.template[Template.MAPPER][Template.MAPPER_USERNAME]
+        return [KCUser() for _ in range(csvloader.data[username].size)]
 
     @ staticmethod
-    def _set_user_parameter(parameter: str, iter_users: Iterator, key: str, value: str):
+    def _set_parameter(parameter: str, iter_users: Iterator, key: str, value: str):
         """set one user's parameter
 
         Args:
@@ -78,7 +54,7 @@ class KCUser(User):
             value (str): value used when parameter is 'attributes' 
         """
         user = next(iter_users)
-        if parameter == 'attributes':
+        if parameter == Template.MAPPER_ATTRIBUTES:
             if user.attributes is None:
                 user.attributes = {}
             user.attributes[key] = value
@@ -86,7 +62,7 @@ class KCUser(User):
             setattr(user, parameter, value)
 
     @ staticmethod
-    def _assign_parameter_each_user(parameter: str, series: Series, list_users: list, key=None):
+    def _assign_parameter_to_user(parameter: str, series: Series, list_users: list, key=None):
         """call _set_user_parameter to assign parameter for a list of users
 
         Args:
@@ -96,9 +72,34 @@ class KCUser(User):
             key ([type], optional): key used when parameter is 'attributes' 
         """
         iter_users = iter(list_users)
-        series.map(lambda x: KCUser._set_user_parameter(
-            parameter, iter_users, key, x))
+        series.map(lambda value: KCUser._set_parameter(
+            parameter, iter_users, key, value))
         logger.info(f'Assign {parameter}  to users')
+
+    @staticmethod
+    def _assign_parameters_to_list_users(csvloader: CSVLoader, list_users: list):
+        """assign parameters for each user
+
+        Args:
+            csvloader (CSVLoader): a Csvloader instance providing files
+            list_users (list): list of empty users
+
+        Raises:
+            KCUserError: Exception raised for errors in the KCUser
+        """
+        list_parameters = list(csvloader.template[Template.MAPPER].keys())
+        for parameter in list_parameters:
+            if not hasattr(KCUser, parameter):
+                raise KCUser.KCUserError(
+                    f'mapper is not allowed to contain parameter: {parameter}')
+            column_name = csvloader.template[Template.MAPPER][parameter]
+            if parameter == Template.MAPPER_ATTRIBUTES and isinstance(column_name, list):
+                for column_name_ in column_name:
+                    KCUser._assign_parameter_to_user(
+                        parameter=parameter, series=csvloader.data[column_name_.get(Template.MAPPER_ATTRIBUTES_VALUE)], list_users=list_users, key=column_name_.get(Template.MAPPER_ATTRIBUTES_KEY))
+            else:
+                KCUser._assign_parameter_to_user(
+                    parameter, csvloader.data[column_name], list_users)
 
     @ staticmethod
     def _add_custom_attributes(csvloader: CSVLoader, list_users: list):
@@ -111,7 +112,7 @@ class KCUser(User):
         Raises:
             KCUserError: Exception raised for errors in the KCUser
         """
-        list_attributes = csvloader.values["custom_attributes"]
+        list_attributes = csvloader.template[Template.CUSTOM_ATTRIBUTES]
         if list_attributes:
             def assign_one_attribute(user: KCUser):
                 """sub function used by map
@@ -126,7 +127,7 @@ class KCUser(User):
                     try:
                         user.attributes[attribute['key']] = attribute['value']
                     except KeyError:
-                        raise KCUserError(
+                        raise KCUser.KCUserError(
                             f'custom_attributes only have attribute key and value.')
             list(map(assign_one_attribute, list_users))
             logger.info(f'Assign {list_attributes}  to users')
@@ -142,7 +143,7 @@ class KCUser(User):
             list: list of users
         """
         list_users = KCUser._create_list_empty_users(csvloader)
-        KCUser._assign_parameters(
+        KCUser._assign_parameters_to_list_users(
             csvloader=csvloader, list_users=list_users)
         KCUser._add_custom_attributes(csvloader, list_users)
         return list_users

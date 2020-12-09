@@ -31,8 +31,8 @@ set_release_version_and_publish:
   script:
     - pip install poetry==${poetry_version}
     - POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --no-dev --no-root
-    - poetry version prerelease
     - poetry config repositories.polynom-nexus https://nexus.polynom.io/repository/polynom-pypi-private/
-    - poetry publish -r polynom-nexus -u "$NEXUS_USER" -p "NEXUS_PASSWORD" --build
+    - poetry publish -r polynom-nexus -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" --build
   only:
     - /^release\//
+    - master

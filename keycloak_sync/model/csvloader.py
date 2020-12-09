@@ -1,51 +1,99 @@
 import logging
 from logging import log
-
+from typing import Union
 import cerberus
 import coloredlogs
 import pandas as pd
+import numpy as np
 import yaml
-from keycloak_sync.abstract.loader import Loader
-
+from keycloak_sync.abstract_model.loader import Loader
+from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-class CSVLoaderError(Exception):
-    """Exception raised for errors in the CSVLoader.
-
-    Attributes:
-        message -- explanation of the error
-    """
-
-    def __init__(self, message):
-        self.message = message
+class Template(Loader):
+    FORMAT = 'format'
+    SEPARATOR = 'separator'
+    HEADER = 'header'
+    DATA_MODEL = 'data_model'
+    DATA_MODEL_NAME = 'name'
+    MAPPER = 'mapper'
+    MAPPER_USERNAME = "username"
+    MAPPER_ATTRIBUTES = 'attributes'
+    MAPPER_ATTRIBUTES_KEY = 'key'
+    MAPPER_ATTRIBUTES_VALUE = 'value'
+    CUSTOM_ATTRIBUTES = 'custom_attributes'
+    RULE_IDENTIFIER = 'identifier'
+    RULE_IDENTIFIER_NAME = 'name'
+    EXPORT = 'export_rules'
+    EXPORT_MAPPER = 'mapper'
+    EXPORT_ROLES = 'available_roles'
 
 
 class CSVLoader(Loader):
-    """Load CSV file and values file
+    """Load CSV file and template file
 
     Args:
         Loader (object): a basic loader
     """
+    FILE_FORMAT = 'CSV'
 
-    def __init__(self, values, file=None):
-        if values:
+    class CSVLoaderError(Exception):
+        """Exception raised for errors in the CSVLoader.
+
+        Attributes:
+            message -- explanation of the error
+        """
+
+        def __init__(self, message):
+            self.message = message
+
+    def __init__(self, template: Path, csvfile: Union[Path, None]):
+        self._load_template(template=template)
+        self._load_csvfile(csvfile=csvfile)
+
+    @property
+    def data(self):
+        return self._data
+
+    @property
+    def template(self):
+        return self._template
+
+    @template.setter
+    def template(self, template):
+        self._template = template
+
+    @data.setter
+    def data(self, data):
+        self._data = data
+
+    def _load_template(self, template: Path):
+        """Loader template file
+
+        Args:
+            template (str): template file path
+
+        Raises:
+            CSVLoader.CSVLoaderError: [description]
+        """
+        try:
+            with open(template, 'r') as stream:
+                self._template = yaml.safe_load(stream)
+        except (TypeError, FileNotFoundError):
+            raise CSVLoader.CSVLoaderError(
+                f'template file path does not exist')
+
+    def _load_csvfile(self, csvfile: Union[Path, None]):
+        if csvfile is not None:
             try:
-                with open(values, 'r') as stream:
-                    self._values = yaml.safe_load(stream)
+                separator = self._template[Template.SEPARATOR]
+                header = self._template[Template.HEADER]
+                self._data = pd.read_csv(filepath_or_buffer=csvfile,
+                                         sep=separator, header=header, skip_blank_lines=True)
+                self._data = self._data.replace({np.nan: None})
             except (TypeError, FileNotFoundError):
-                raise CSVLoaderError(f'Values file path does not exist')
-            if file:
-                try:
-                    separator = self._values["separator"]
-                    header = self._values["header"]
-                    self._data = pd.read_csv(filepath_or_buffer=file,
-                                             sep=separator, header=header, skip_blank_lines=True)
-                    self.format = 'CSV'
-                except (TypeError, FileNotFoundError):
-                    raise CSVLoaderError(f'CSV File path does not exist')
-        else:
-            raise CSVLoaderError(f'Values file is nessecary')
+                raise CSVLoader.CSVLoaderError(f'CSV File path does not exist')
 
     @staticmethod
     def set_log_level(level: str):
@@ -56,137 +104,132 @@ class CSVLoader(Loader):
         """
         coloredlogs.install(level=level, logger=logger)
 
-    @property
-    def data(self):
-        return self._data
-
-    @property
-    def values(self):
-        return self._values
-
-    @values.setter
-    def values(self, values):
-        self._values = values
-
-    @data.setter
-    def data(self, data):
-        self._data = data
-
     @staticmethod
-    def _to_schema(value: dict) -> dict:
-        """Change a dict into schema 
+    def _get_column_schema_from_data_model(data_model: dict) -> dict:
+        """get a column schema
 
         Args:
-            value ([dict]): define column's rule
+            data_model (dict): define column's schema
 
         Raises:
-            CSVLoaderError: Custom CSVLoader type error
+            CSVLoader.CSVLoaderError: Exception raised for errors in the CSVLoader
 
         Returns:
             dict: schema which can be used bt cerberus
         """
         try:
-            name = value["name"]
-            del value["name"]
-            return {name: value}
+            name = data_model[Template.DATA_MODEL_NAME]
+            schema = {}
+            for rule_name, rule in data_model.items():
+                if rule_name != Template.DATA_MODEL_NAME:
+                    schema[rule_name] = rule
+            return {name: {'type': 'list', 'schema': schema}}
         except KeyError:
-            raise CSVLoaderError(f'data_model should contains label: name')
+            raise CSVLoader.CSVLoaderError(
+                f'data_model should contains label: name')
 
     @staticmethod
-    def _format_series_to_schema(series: pd.Series) -> list:
-        """change pandas.series type in to list of dictionary
+    def _change_column_to_dict(column: pd.Series) -> dict:
+        """change one column into dictionary
 
         Args:
-            series (pd.Series): a column in csv file
+            column (pd.Series): one column serie
 
         Returns:
-            list: list of dictionary waiting to be valided
+            dict: dictionary with {column name: column values list}
         """
-        def to_formatted(series: pd.Series, data: str) -> dict:
-            """sub function used by map
-
-            Args:
-                series (pd.Series): a column
-                data (str): each value in this column
-
-            Returns:
-                dict: key value pair defined by column's name and each value in column
-            """
-            if pd.isnull(data):
-                data = None
-            return {series.name: data}
-        return list(series.map(lambda x: to_formatted(series, x)))
+        return {column.name: column.tolist()}
 
     @staticmethod
-    def _find_schema(schema_list: list, schema_name: str) -> dict:
-        """find schema from values file
+    def _validate_column(column: pd.Series, column_schema: dict):
+        """validate one column
 
         Args:
-            schema_list (list): list of schema read from values
-            schema_name (str): needed schema name
+            column (pd.Series): one column serie
+            column_schema (dict): column schema used by cerberus
 
-        Returns:
-            dict: schema needed
+        Raises:
+            CSVLoader.CSVLoaderError: Exception raised for errors in the CSVLoader
         """
-        for schema in schema_list:
-            if list(schema.keys())[0] == schema_name:
-                return schema
+        try:
+            validator = cerberus.Validator(column_schema)
+        except cerberus.schema.SchemaError as error:
+            raise CSVLoader.CSVLoaderError(f'Unknown rule: {error}')
+        if validator.validate(CSVLoader._change_column_to_dict(column)):
+            logger.info(f'Column: {column.name} is valid')
+        else:
+            error_value = validator._errors[0].info[0][0].value
+            raise CSVLoader.CSVLoaderError(
+                f'Value: {error_value} in column :{column.name}is invalid')
 
     @staticmethod
-    def _setup_column(key: str, value: str, list_users: list, dataframe: dict):
-        """set up each column for exporting
+    def _check_data_model(data_model: dict, column_names: list) -> bool:
+        """check data model is valid or not
+
+        Args:
+            data_model (dict): read from template file
+            column_names (list): list of column's names in csv file
+
+        Raises:
+            CSVLoader.CSVLoaderError: Exception raised for errors in the CSVLoader
+
+        Returns:
+            bool: true is valide otherwise is false
+        """
+        try:
+            data_model_name = data_model[Template.DATA_MODEL_NAME]
+        except KeyError:
+            raise CSVLoader.CSVLoaderError(
+                'template file should contain label: data_model.name')
+        if data_model_name in column_names:
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def _read_users_into_dataframe(key: str, value: Union[list, str], list_users: list, dataframe: dict):
+        """read users object into dataframe
 
         Args:
             key (str): each column name responding a user's parameter
-            value (str): column name
+            value (str/list): column name
             list_users (list): list of users
             dataframe (dict): used for transforming in to csv
         """
-        if key == 'attributes':
+        if key == Template.MAPPER_ATTRIBUTES:
             for attribute in value:
-                dataframe[attribute['value']] = []
-                list(map(lambda x: dataframe[attribute['value']].append(
-                    x.attributes[attribute['key']]), list_users))
+                dataframe[attribute[Template.MAPPER_ATTRIBUTES_VALUE]] = []
+                list(map(lambda user: dataframe[attribute[Template.MAPPER_ATTRIBUTES_VALUE]].append(
+                    user.attributes[attribute[Template.MAPPER_ATTRIBUTES_KEY]]), list_users))
         else:
             dataframe[value] = []
-            list(map(lambda x: dataframe[value].append(
-                getattr(x, key)), list_users))
+            for user in list_users:
+                dataframe[value].append(getattr(user, key))
 
-    def valide_schemas(self):
-        """valide csv file
+    def validate(self):
+        """validate csv file
 
         Raises:
-            CSVLoaderError: csv file is invalide
+            CSVLoader.CSVLoaderError: Exception raised for errors in the CSVLoader
         """
-        if not self._values["format"].upper() == self.format:
-            raise CSVLoaderError('Only support CSV file')
+        if not self._template[Template.FORMAT].upper() == CSVLoader.FILE_FORMAT:
+            raise CSVLoader.CSVLoaderError('Only support CSV file')
         try:
-            schemas = self._values["data_model"]
-            cols = self._data.columns.tolist()
-            schemas_names = list(map(lambda x: x["name"], schemas))
-            schema_list = list(map(CSVLoader._to_schema, schemas))
+            data_models = self._template[Template.DATA_MODEL]
+            column_names = self._data.columns.tolist()
         except KeyError as error:
-            raise CSVLoaderError(
-                'Values file should contain label: name in data_model')
-        for schema_name in schemas_names:
-            if schema_name in cols:
-                schema = CSVLoader._find_schema(schema_list, schema_name)
-                try:
-                    validator = cerberus.Validator(schema)
-                except cerberus.schema.SchemaError as error:
-                    raise CSVLoaderError(f'Unknown rule: {error}')
-                list_data = CSVLoader._format_series_to_schema(
-                    self._data[schema_name])
-                error_line = 0
-                for result in list(map(validator.validate, list_data)):
-                    error_line += 1
-                    if not result:
-                        raise CSVLoaderError(
-                            f"Column: {schema_name} is invalid in line : {error_line}")
+            raise CSVLoader.CSVLoaderError(
+                'template file should contain label: data_model')
+        for data_model in data_models:
+            if CSVLoader._check_data_model(data_model=data_model, column_names=column_names):
+                column_schema = CSVLoader._get_column_schema_from_data_model(
+                    data_model)
+                column_name = data_model[Template.DATA_MODEL_NAME]
+                CSVLoader._validate_column(
+                    column=self._data[column_name], column_schema=column_schema)
             else:
-                raise CSVLoaderError(
-                    f"Column: {schema_name} does not exist in CSV file")
-            logger.info(f'Column: {schema_name} is Valided')
+                raise CSVLoader.CSVLoaderError(
+                    f"Column {data_model[Template.DATA_MODEL_NAME]} does not exist in file")
 
     def load_identifier(self, rule: str) -> dict:
         """loader identifier to fliter users
@@ -195,22 +238,25 @@ class CSVLoader(Loader):
             rule (str): export or delete
 
         Raises:
-            CSVLoaderError: un able to load identifier
+            CSVLoader.CSVLoaderError: Exception raised for errors in the CSVLoader
 
         Returns:
             dict: a shema used by cerberus
         """
-        if self._values[rule]:
-            if self._values[rule]['identifier']:
-                name = self._values[rule]['identifier']['name']
-                rules = {k: v for k, v in self._values[rule]['identifier'].items() if k not in {
-                    'name': name}}
+        if self._template[rule]:
+            if self._template[rule][Template.RULE_IDENTIFIER]:
+                name = self._template[rule][Template.RULE_IDENTIFIER][Template.RULE_IDENTIFIER_NAME]
+                rules = {}
+                for rule_name, rule in self._template[rule][Template.RULE_IDENTIFIER].items():
+                    if rule_name != Template.RULE_IDENTIFIER_NAME:
+                        rules[rule_name] = rule
                 return {name: rules}
             else:
-                raise CSVLoaderError(
+                raise CSVLoader.CSVLoaderError(
                     f'Export_rules file should contains identifier to fliter users')
         else:
-            raise CSVLoaderError(f'Values file should contains export_rules')
+            raise CSVLoader.CSVLoaderError(
+                f'template file should contains {rule}')
 
     def export_users_to_csv(self, list_users: list, export_path: str):
         """export users object to csv
@@ -220,8 +266,8 @@ class CSVLoader(Loader):
             export_path (str): path where csv file in
         """
         dataframe = {}
-        list_mapper = self._values["export_rules"]["mapper"]
-        list(map(lambda x: CSVLoader._setup_column(
+        list_mapper = self._template[Template.EXPORT][Template.EXPORT_MAPPER]
+        list(map(lambda x: CSVLoader._read_users_into_dataframe(
             x[0], x[1], list_users, dataframe), list_mapper.items()))
         pd.DataFrame(data=dataframe).to_csv(
-            path_or_buf=export_path, sep=self._values["export_rules"]["separator"], header=self._values["export_rules"]["header"], index=False)
+            path_or_buf=export_path, sep=self._template["export_rules"]["separator"], header=self._template["export_rules"]["header"], index=False)
