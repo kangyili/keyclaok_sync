@@ -83,8 +83,8 @@ def export(**kwargs):
     """Export users from keycloak"""
     set_log(int(kwargs.get(Arguments.VERBOSE)))
     try:
-        csvloader = CSVLoader(template=kwargs.get(
-            Arguments.CSV_FILE_TEMPLATE), csvfile=None)
+        csvloader = CSVLoader(template=Path(kwargs.get(
+            Arguments.CSV_FILE_TEMPLATE)), csvfile=None)
         kc = Keycloak(server_url=kwargs.get(Arguments.KEYCLOAK_SERVER_URL),
                       client_id=kwargs.get(Arguments.KEYCLOAK_CLIENT_ID),
                       realm_name=kwargs.get(Arguments.KEYCLOAK_REALM_NAME),
@@ -142,8 +142,8 @@ def delete(**kwargs):
     """Delete users by giving fliter conditions"""
     set_log(int(kwargs.get(Arguments.VERBOSE)))
     try:
-        csvloader = CSVLoader(template=kwargs.get(
-            Arguments.CSV_FILE_TEMPLATE), csvfile=None)
+        csvloader = CSVLoader(template=Path(kwargs.get(
+            Arguments.CSV_FILE_TEMPLATE)), csvfile=None)
         kc = Keycloak(server_url=kwargs.get(Arguments.KEYCLOAK_SERVER_URL),
                       client_id=kwargs.get(Arguments.KEYCLOAK_CLIENT_ID),
                       realm_name=kwargs.get(Arguments.KEYCLOAK_REALM_NAME),
