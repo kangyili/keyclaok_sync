@@ -26,6 +26,8 @@ class Template(Loader):
     RULE_IDENTIFIER = 'identifier'
     RULE_IDENTIFIER_NAME = 'name'
     EXPORT = 'export_rules'
+    EXPORT_SEPARATOR = 'separator'
+    EXPORT_HEADER = 'header'
     EXPORT_MAPPER = 'mapper'
     EXPORT_ROLES = 'available_roles'
 
@@ -271,4 +273,4 @@ class CSVLoader(Loader):
             CSVLoader._read_users_into_dataframe(
                 user_parameter, column_name, list_users, dataframe)
         pd.DataFrame(data=dataframe).to_csv(
-            path_or_buf=export_path, sep=self._template["export_rules"]["separator"], header=self._template["export_rules"]["header"], index=False)
+            path_or_buf=export_path, sep=self._template[Template.EXPORT][Template.EXPORT_SEPARATOR], header=self._template[Template.EXPORT][Template.EXPORT_HEADER], index=False)
