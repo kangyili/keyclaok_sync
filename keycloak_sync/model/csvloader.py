@@ -267,7 +267,8 @@ class CSVLoader(Loader):
         """
         dataframe = {}
         list_mapper = self._template[Template.EXPORT][Template.EXPORT_MAPPER]
-        list(map(lambda x: CSVLoader._read_users_into_dataframe(
-            x[0], x[1], list_users, dataframe), list_mapper.items()))
+        for user_parameter, column_name in list_mapper.items():
+            CSVLoader._read_users_into_dataframe(
+                user_parameter, column_name, list_users, dataframe)
         pd.DataFrame(data=dataframe).to_csv(
             path_or_buf=export_path, sep=self._template["export_rules"]["separator"], header=self._template["export_rules"]["header"], index=False)
