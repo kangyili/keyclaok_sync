@@ -1,6 +1,6 @@
 # Install
 
-Create a compte on https://nexus.polynom.io
+Create a account on https://nexus.polynom.io
 
 ```shell
 pip install --extra-index-url=https://<Your login name>:<Your Password>@nexus.polynom.io/repository/polynom-pypi-all/simple keycloak_sync
