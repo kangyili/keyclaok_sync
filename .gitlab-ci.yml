@@ -1,5 +1,6 @@
 stages:
   - test
+  - build
   - publish
 
 variables:
@@ -7,6 +8,22 @@ variables:
   app_name: "keycloak-synchronization-tool"
   app_label: "Keycloak Synchronization Tool"
   poetry_version: "1.1.4"
+  project_id: pripolis-216913
+  DOCKER_HOST: tcp://localhost:2375
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  image_name: eu.gcr.io/${project_id}/${app_name}
+
+build_dev_version:
+  stage: build
+  script:
+    # Using --cache-from to speed up the build
+    - docker build --build-arg NEXUS_USER=$NEXUS_USER --build-arg NEXUS_PASSWORD=$NEXUS_PASSWORD -t ${image_name}:dev .
+    - echo "$SERVICE_ACCOUNT_KEY" > key.json
+    - docker login -u _json_key --password-stdin https://eu.gcr.io < key.json
+    - docker push ${image_name}:dev
+  only:
+    - develop
 
 sonar_test:
   image: sonarsource/sonar-scanner-cli:latest
@@ -31,6 +48,7 @@ set_release_version_and_publish:
   script:
     - pip install poetry==${poetry_version}
     - POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --no-dev --no-root
+    - poetry version patch
     - poetry config repositories.polynom-nexus https://nexus.polynom.io/repository/polynom-pypi-private/
     - poetry publish -r polynom-nexus -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" --build
   only:
