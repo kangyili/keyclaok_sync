@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "keycloak_sync"
-version = "0.0.1"
+version = "1.0.0"
 description = "keycloak cli tool"
 authors = ["Kangyi LI <nolankangyi@gmail.com>"]
 readme="README.md"
