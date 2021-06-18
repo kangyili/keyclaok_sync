@@ -1,0 +1,88 @@
+client: "test"
+encoding: "latin1"
+format: "CSV"
+separator: ";"
+header: 0
+ignore_n_rows: 1
+data_model:
+  - name: "Date active"
+    type: "string"
+    regex: "^[0-9]{2}/[0-9]{2}/[0-9]{2}$"
+    nullable: false
+  - name: "Date desactive"
+    type: "string"
+    regex: "^.*$"
+    nullable: true
+  - name: "Profil"
+    type: "string"
+    regex: "*$"
+    nullable: false
+  - name: "lastname"
+    type: "string"
+    regex: "^[a-zA-Z].*$"
+    nullable: false
+  - name: "firstname"
+    type: "string"
+    regex: "^[a-zA-Z].*$"
+    nullable: false
+  - name: "Mail"
+    type: "string"
+    regex: "^[a-zA-Z].*@.*$"
+    nullable: false
+  - name: "password"
+    type: "string"
+    regex: "^.*$"
+    nullable: true
+  - name: "Custom col"
+    type: "string"
+    regex: "^[0-9A-Z]{6}(_[0-9A-Z]{6})*$"
+    nullable: false
+
+mapper:
+  createdtime: "Date active"
+  deactivetime: "Date desactive"
+  email: "Mail"
+  username: "Mail"
+  firstname: "firstname"
+  lastname: "lastname"
+  role: "Profil"
+  password: "password"
+  attributes:
+    - key: "Custom attribute1"
+      value: "Custom col"
+
+custom_attributes:
+  - key: "Custom attribute2"
+    value: "attribute2"
+
+export_rules:
+  format: "CSV"
+  separator: ";"
+  header: true
+  identifier:
+    name: "username"
+    type: "string"
+    regex: "^[a-z].*@testonly.com$"
+
+  mapper:
+    createdtime: "Date active"
+    deactivetime: "Date desactive"
+    email: "Mail"
+    username: "Mail"
+    firstname: "firstname"
+    lastname: "lastname"
+    role: "Profil"
+    password: "password"
+    attributes:
+      - key: "Custom attribute1"
+        value: "Custom col"
+
+  available_roles:
+    - Admin
+    - User
+
+delete_rules:
+  identifier:
+    name: "username"
+    type: "string"
+    regex: "^.*@test.com$"

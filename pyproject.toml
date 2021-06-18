@@ -1,8 +1,9 @@
 [tool.poetry]
 name = "keycloak_sync"
-version = "0.1.8"
+version = "0.0.1"
 description = "keycloak cli tool"
-authors = ["Kangyi LI <kangyi.li@polynom.com>"]
+authors = ["Kangyi LI <nolankangyi@gmail.com>"]
+readme="README.md"
 
 [tool.poetry.dependencies]
 python = "^3.8"
